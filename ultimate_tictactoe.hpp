@@ -6,17 +6,18 @@
 #include <ostream>
 #include <vector>
 
+#include "tictactoe_utils.hpp"
+
 namespace ultimate_tictactoe {
 
-typedef std::bitset<9*9*2> Board;
-typedef std::bitset<3*3*2> Subboard;
+typedef std::bitset<9> ActiveMask;
 
 class Environment {
   public:
     static constexpr int number_of_players = 2;
 
     struct State {
-      Board board;
+      std::array<tictactoe::Board,9> subboards;
       int active_subboard;
     };
 
@@ -47,9 +48,14 @@ class Environment {
     void reset();
 
   private:
-    State m_state;
-    Subboard m_macro_view;
+
+    void update_score();
+
     Reward m_score;
+    State m_state;
+    std::bitset<9> m_playable_subboards;
+    std::bitset<9> m_x_winned_subboards;
+    std::bitset<9> m_o_winned_subboards;
     int m_turn;
     int m_current_player;
 };

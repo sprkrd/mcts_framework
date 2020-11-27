@@ -140,6 +140,11 @@ class LruMap {
       return m_capacity;
     }
 
+    void clear() {
+      m_list.clear();
+      m_map.clear();
+    }
+
   private:
     void touch(iterator it) {
       m_list.splice(m_list.begin(), m_list, it);

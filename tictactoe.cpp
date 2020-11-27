@@ -1,11 +1,7 @@
-#include "tictactoe_utils.hpp"
 #include "utils.hpp"
 
 #include "tictactoe.hpp"
 
-using tictactoe::Board;
-using tictactoe::calculate_result;
-using mcts::check_action;
 
 namespace tictactoe {
 
@@ -21,7 +17,7 @@ std::vector<Action> Environment::get_available_actions() const {
   std::vector<Action> available_actions;
   available_actions.reserve(9);
   for (int i = 0; i < 9; ++i) {
-    if (!m_state.board[i] && !m_state.board[9+i])
+    if (is_free_cell(m_state.board, i))
       available_actions.push_back({i});
   }
   return available_actions;
@@ -32,26 +28,31 @@ int Environment::get_current_player() const {
 }
 
 bool Environment::is_terminal() const {
-  return get_turn() == 9 || calculate_result(m_state.board);
+  return calculate_result(m_state.board) != Result::ongoing;
 }
 
 Reward Environment::get_score() const {
-  int result = calculate_result(m_state.board);
-  if (result)
-    return {double(result==1), double(result==-1)};
-  return {0.5*is_terminal(), 0.5*is_terminal()};
+  switch (calculate_result(m_state.board)) {
+    case Result::tie:
+      return {0.5,0.5};
+    case Result::o_wins:
+      return {0,1};
+    case Result::ongoing:
+      return {0,0};
+    default: //case Result::x_wins:
+      return {1,0};
+  }
 }
 
 Reward Environment::step(const Action& action, bool check) {
   if (check)
-    check_action(*this, action);
-  int current_player = get_current_player();
-  m_state.board[9*current_player + action.cell] = true;
+    mcts::check_action(*this, action);
+  make_move(m_state.board, action.cell, get_current_player());
   return get_score();
 }
 
 void Environment::reset() {
-  m_state.board = 0;
+  m_state.board.reset();
 }
 
 bool operator==(const State& lhs, const State& rhs) {
@@ -63,8 +64,6 @@ bool operator==(const Action& lhs, const Action& rhs) {
 }
 
 std::ostream& operator<<(std::ostream& out, const State& state) {
-  int number_of_filled_cells = state.board.count();
-  int result = calculate_result(state.board);
   out << "  0 1 2\n";
   for (int i = 0; i < 9; ++i) {
     int row = i/3;
@@ -76,20 +75,18 @@ std::ostream& operator<<(std::ostream& out, const State& state) {
     }
     else if (col > 0)
       out << '|';
-    if (state.board[i])
-      out << 'x';
-    else if (state.board[9+i])
-      out << 'o';
-    else
-      out << ' ';
+    out << get_char_representation(state.board, i);
   }
-  if (result == 1)
-    out << "\nx wins";
-  else if (result == -1)
-    out << "\no wins";
-  else if (number_of_filled_cells == 9)
-    out << "\nis a draw";
-  return out;
+  switch (calculate_result(state.board)) {
+    case Result::tie:
+      return out << "\ntie";
+    case Result::o_wins:
+      return out << "\no wins";
+    case Result::ongoing:
+      return out;
+    default: //case Result::x_wins:
+      return out << "\nx wins";
+  }
 }
 
 std::ostream& operator<<(std::ostream& out, const Action& action) {
@@ -108,6 +105,6 @@ std::istream& operator>>(std::istream& in, Action& action) {
 } // tictactoe
 
 size_t std::hash<tictactoe::State>::operator()(const State& state) const {
-  std::hash<Board> hasher;
+  std::hash<tictactoe::Board> hasher;
   return hasher(state.board);
 }

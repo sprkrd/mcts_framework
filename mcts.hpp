@@ -68,6 +68,8 @@ class MctsBase {
       return m_statistics;
     }
 
+    virtual void reset() { }
+
     virtual ~MctsBase() = default;
 
   protected:
@@ -122,6 +124,10 @@ class Mcts : public MctsBase<Environment> {
              << root << '\n';
       }
       return root.action_vector[argmax].action;
+    }
+
+    virtual void reset() override {
+      m_memory.clear();
     }
 
   private:
@@ -181,7 +187,7 @@ class Mcts : public MctsBase<Environment> {
     DefaultPolicy m_default_policy;
     Backup m_backup;
     memory::LruMap<State<Environment>,Node> m_memory;
-    // std::unordered_map<State<Environment>,Node> m_memory;
+    //std::unordered_map<State<Environment>,Node> m_memory;
 };
 
 template<class Environment, class... Args>

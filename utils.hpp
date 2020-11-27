@@ -23,12 +23,10 @@ void check_action(const Environment& env, const typename Environment::Action& ac
 template <typename T>
 inline void hash_combine(std::size_t& seed, const T& val) {
   static_assert(sizeof(std::size_t) == 4 || sizeof(std::size_t) == 8);
-  if constexpr(sizeof(std::size_t) == 4) {
+  if constexpr(sizeof(std::size_t) == 4)
     seed ^= std::hash<T>{}(val) + 0x9e3779b9U + (seed<<6) + (seed>>2);
-  }
-  else {
+  else
     seed ^= std::hash<T>{}(val) + 0x9e3779b97f4a7c15ULL + (seed<<12) + (seed>>4);
-  }
 }
 
 }

@@ -6,9 +6,9 @@
 #include <ostream>
 #include <vector>
 
-namespace tictactoe {
+#include "tictactoe_utils.hpp"
 
-typedef std::bitset<18> Board;
+namespace tictactoe {
 
 class Environment {
   public:

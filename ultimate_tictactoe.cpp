@@ -1,48 +1,10 @@
-#include "tictactoe_utils.hpp"
 #include "utils.hpp"
 
 #include "ultimate_tictactoe.hpp"
 
-using ultimate_tictactoe::Board;
-using tictactoe::calculate_result;
-using mcts::check_action;
+using tictactoe::Result;
 
 namespace ultimate_tictactoe {
-
-Environment::Environment() {
-  reset();
-}
-
-std::vector<Action> Environment::get_available_actions() const {
-  std::vector<Action> available_actions;
-  available_actions.reserve(81);
-  return available_actions;
-}
-
-bool Environment::is_terminal() const {
-  return m_score[0] + m_score[1] != 0;
-}
-
-const Reward& Environment::step(const Action& action, bool check) {
-  if (check)
-    check_action(*this, action);
-  return m_score;
-}
-
-void Environment::reset() {
-  m_state = State();
-  m_macro_view = Subboard();
-  m_score = Reward();
-  m_turn = m_current_player = 0;
-}
-
-bool operator==(const State& lhs, const State& rhs) {
-  return lhs.board == rhs.board && lhs.active_subboard == rhs.active_subboard;
-}
-
-bool operator==(const Action& lhs, const Action& rhs) {
-  return lhs.cell == rhs.cell;
-}
 
 namespace {
 
@@ -58,26 +20,131 @@ std::pair<int,int> to_row_col(int subboard, int cell) {
   return {offset_i + cell/3, offset_j + cell%3};
 }
 
-char cell_to_char(const Board& board, int i, int j) {
+char get_char_representation(const State& state, int i, int j) {
   auto[subboard, cell] = to_subboard_cell(i, j);
-  char cell_content = ' ';
-  if (board[18*subboard+cell])
-    cell_content = 'x';
-  else if (board[18*subboard+9+cell])
-    cell_content = 'o';
-  return cell_content;
+  return tictactoe::get_char_representation(state.subboards[subboard], cell);
 }
 
+char get_subboard_status_char(const State& state, int subboard) {
+  switch (tictactoe::calculate_result(state.subboards[subboard])) {
+    case Result::tie:
+      return 'T';
+    case Result::o_wins:
+      return 'O';
+    case Result::ongoing:
+      return state.active_subboard == -1 || state.active_subboard == subboard? '*' : ' ';
+    default: //case Result::x_wins:
+      return 'X';
+  }
+}
+
+void get_available_actions_helper(
+    const State& state,
+    int subboard,
+    std::vector<Action>& available_actions
+) {
+  for (int cell = 0; cell < 9; ++cell) {
+    if (tictactoe::is_free_cell(state.subboards[subboard], cell))
+      available_actions.push_back({subboard, cell});
+  }
+}
+
+} // anonymous ns
+
+Environment::Environment() {
+  reset();
+}
+
+std::vector<Action> Environment::get_available_actions() const {
+  std::vector<Action> available_actions;
+  if (m_state.active_subboard == -1) {
+    available_actions.reserve(81);
+    for (int subboard = 0; subboard < 9; ++subboard)
+      if (m_playable_subboards[subboard])
+        get_available_actions_helper(m_state, subboard, available_actions);
+  }
+  else {
+    available_actions.reserve(9);
+    get_available_actions_helper(m_state, m_state.active_subboard, available_actions);
+  }
+  return available_actions;
+}
+
+bool Environment::is_terminal() const {
+  return m_score[0] || m_score[1];
+}
+
+const Reward& Environment::step(const Action& action, bool check) {
+  if (check)
+    mcts::check_action(*this, action);
+  tictactoe::make_move(m_state.subboards[action.subboard],
+      action.cell, m_current_player);
+  switch (tictactoe::calculate_result(m_state.subboards[action.subboard])) {
+    case Result::tie:
+      m_playable_subboards[action.subboard] = false;
+      update_score();
+      break;
+    case Result::o_wins:
+      m_playable_subboards[action.subboard] = false;
+      m_o_winned_subboards[action.subboard] = true;
+      update_score();
+      break;
+    case Result::x_wins:
+      m_playable_subboards[action.subboard] = false;
+      m_x_winned_subboards[action.subboard] = true;
+      update_score();
+    default:
+      break;
+  }
+  ++m_turn;
+  m_current_player = !m_current_player;
+  m_state.active_subboard = m_playable_subboards[action.cell]? action.cell : -1;
+  return m_score;
+}
+
+void Environment::reset() {
+  for (auto& subboard : m_state.subboards)
+    subboard.reset();
+  m_state.active_subboard = -1;
+  m_x_winned_subboards.reset();
+  m_o_winned_subboards.reset();
+  m_playable_subboards.set();
+  m_score = Reward();
+  m_turn = m_current_player = 0;
+}
+
+void Environment::update_score() {
+  using tictactoe::LU_TABLE;
+  bool x_ttt = LU_TABLE[m_x_winned_subboards.to_ulong()];
+  bool o_ttt = LU_TABLE[m_o_winned_subboards.to_ulong()];
+  bool more_plays = m_playable_subboards.any();
+  int x_win_count = m_x_winned_subboards.count();
+  int o_win_count = m_o_winned_subboards.count();
+  bool x_wins = x_ttt || (!more_plays && !o_ttt && x_win_count>o_win_count);
+  bool o_wins = o_ttt || (!more_plays && !x_ttt && o_win_count>x_win_count);
+  bool tie = !x_wins && !o_wins && !more_plays;
+  m_score[0] = x_wins + 0.5*tie;
+  m_score[1] = o_wins + 0.5*tie;
+}
+
+bool operator==(const State& lhs, const State& rhs) {
+  return lhs.active_subboard == rhs.active_subboard && lhs.subboards == rhs.subboards;
+}
+
+bool operator==(const Action& lhs, const Action& rhs) {
+  return lhs.subboard == rhs.subboard && lhs.cell == rhs.cell;
 }
 
 std::ostream& operator<<(std::ostream& out, const State& state) {
   out << "  0 1 2   3 4 5   6 7 8\n";
   for (unsigned i = 0; i < 9; ++i) {
-    
-    if (i > 0 && i%3 == 0) {
-      out << "        |       |       \n"
-          << " -----------------------\n";
+    if (i%3 == 0) {
+      if (i > 0)
+        out << " -----------------------\n";
+      out << "        |       |       \n";
     }
+    else
+      out << "  ----- | ----- | ----- \n";
     for (unsigned j = 0; j < 9; ++j) {
       if (j == 0)
         out << i << ' ';
@@ -85,10 +152,14 @@ std::ostream& operator<<(std::ostream& out, const State& state) {
         out << " | ";
       else
         out << '|';
-      char content = cell_to_char(state.board, i, j);
-      out << content;
+      out << get_char_representation(state, i, j);
     }
     out << '\n';
+    if (i%3 == 2)
+      out << "    "    << get_subboard_status_char(state, i-i%3)
+          << "   |   " << get_subboard_status_char(state, i-i%3+1)
+          << "   |   " << get_subboard_status_char(state, i-i%3+2)
+          << "   \n";
   }
   return out;
 }
@@ -109,7 +180,9 @@ std::istream& operator>>(std::istream& in, Action& action) {
 
 std::size_t std::hash<ultimate_tictactoe::State>::operator()(const State& state) const {
   std::size_t seed = 0;
-  mcts::hash_combine(seed, state.board);
   mcts::hash_combine(seed, state.active_subboard);
+  for (auto subboard : state.subboards)
+    mcts::hash_combine(seed, subboard);
   return seed;
 }
+
