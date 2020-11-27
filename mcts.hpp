@@ -86,7 +86,7 @@ class Mcts : public MctsBase<Environment> {
       Select select,
       DefaultPolicy default_policy,
       Backup backup,
-      int memory_capacity = 3000000
+      int memory_capacity = 300000
     ) :
       m_select(std::move(select)),
       m_default_policy(std::move(default_policy)),
@@ -121,7 +121,10 @@ class Mcts : public MctsBase<Environment> {
         *log << this->m_statistics << "\n\n"
              << "Current node\n"
              << "------------\n"
-             << root << '\n';
+             << root << '\n'
+             << "Memory usage\n"
+             << "------------\n"
+             << m_memory.size();
       }
       return root.action_vector[argmax].action;
     }
